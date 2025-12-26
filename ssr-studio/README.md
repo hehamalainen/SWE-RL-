@@ -1,12 +1,41 @@
 # SSR Studio - Self-Play SWE-RL Demo & Research Platform
 
-A complete implementation demonstrating SSR-style self-play for software engineering, where an agent can create its own executable training tasks (bugs + oracle tests) and learn to solve them. Based on the paper ["Toward Training Superintelligent Software Agents through Self-Play SWE-RL"](https://arxiv.org/abs/2512.18552v1).
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![arXiv](https://img.shields.io/badge/arXiv-2512.18552-b31b1b.svg)](https://arxiv.org/abs/2512.18552)
+
+A complete implementation demonstrating **SSR-style self-play** for software engineering, where an agent can create its own executable training tasks (bugs + oracle tests) and learn to solve them.
+
+---
+
+## 🙏 Acknowledgments
+
+This project is an implementation inspired by the groundbreaking research paper:
+
+> **"SWE-RL: Advancing LLM Reasoning via Reinforcement Learning on Open Software Evolution"**
+>
+> **Authors:** Yuxiang Wei, Olivier Duchenne, Jade Copet, Quentin Carbonneaux, Lingming Zhang, Daniel Fried, Gabriel Synnaeve, Rishabh Singh, Sida I. Wang
+>
+> **Affiliations:** Meta AI (FAIR), University of Illinois Urbana-Champaign, Carnegie Mellon University
+>
+> 📄 **Paper:** [arXiv:2512.18552](https://arxiv.org/abs/2512.18552) (December 2024)
+
+We extend our sincere gratitude to the research team for their innovative work on:
+- Demonstrating that **reinforcement learning on real-world software evolution data** can significantly advance LLM reasoning
+- Introducing the **SSR (Self-play SWE-RL)** paradigm for autonomous task generation
+- Achieving state-of-the-art results on SWE-bench with openly available methods
+- Providing detailed methodology for **bug injection validation** (the 7-step process we implement here)
+
+This implementation aims to make the SSR concepts accessible and explorable for the broader community.
+
+---
 
 ## 🎯 Overview
 
-SSR Studio implements a complete pipeline for:
-1. **Bug Injection** - An injector agent analyzes a codebase and creates realistic, validated bugs
-2. **Validation** - 7-step validation ensures bugs are realistic and solvable
+SSR Studio implements the complete **self-play pipeline** from the paper:
+
+1. **Bug Injection** - An LLM agent analyzes a codebase and creates realistic, validated bugs
+2. **Validation** - 7-step validation ensures bugs are realistic and solvable (per SSR paper)
 3. **Bug Solving** - A solver agent attempts to fix the bug using only the oracle test
 4. **Evaluation** - Rewards are calculated based on solve success
 
@@ -25,25 +54,53 @@ SSR Studio implements a complete pipeline for:
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
+### The Core Insight
+
+From the SSR paper:
+> *"An agent can create its own executable training tasks and learn to solve them."*
+
+This enables:
+- **Unlimited training data** - No reliance on human-curated bug datasets
+- **Self-improvement loop** - Agent learns from self-generated challenges
+- **Quality control** - Rigorous validation ensures generated tasks are meaningful
+
+---
+
 ## ✨ Features
 
-- **Multi-Provider LLM Support**: OpenAI, Anthropic Claude, and local models (vLLM)
-- **Secure Docker Sandboxing**: Isolated execution with resource limits
+- **Multi-Provider LLM Support**: OpenAI GPT-4, Anthropic Claude, and local models (vLLM)
+- **Secure Docker Sandboxing**: Isolated execution with network disabled, resource limits
 - **7-Step Validation**: Complete SSR paper validation pipeline including inverse mutation testing
 - **Real-time Dashboard**: Next.js frontend with live episode tracking
 - **CLI Interface**: Full command-line control for automation
 - **Metrics & Analytics**: Comprehensive performance tracking
+- **Self-contained Demo**: Run the full pipeline with one command
+
+---
 
 ## 🚀 Quick Start
 
+### Try the Demo (Fastest)
+
+```bash
+cd ssr-studio
+pip install openai anthropic rich pytest
+python demo.py --api-key YOUR_OPENAI_KEY
+```
+
+This runs a complete episode:
+1. Injects a bug into the example calculator project
+2. Validates the bug meets all 7 SSR criteria
+3. Attempts to solve using a separate LLM call
+4. Reports success/failure with full diffs
+
 ### Prerequisites
 
-- Docker & Docker Compose
-- Python 3.11+ (for development)
-- Node.js 20+ (for frontend development)
-- OpenAI or Anthropic API key (or local GPU for vLLM)
+- Python 3.11+
+- Docker (for sandbox execution in full platform)
+- OpenAI or Anthropic API key
 
-### Using Docker Compose (Recommended)
+### Full Platform Setup
 
 1. **Clone and setup**:
 ```bash
@@ -62,56 +119,67 @@ docker-compose up -d
 - API: http://localhost:8000
 - API Docs: http://localhost:8000/docs
 
-### Local Development
+---
 
-1. **Install backend dependencies**:
-```bash
-pip install uv
-uv pip install -e ".[dev]"
-```
+## 🔬 The 7 Validation Steps
 
-2. **Start PostgreSQL and Redis**:
-```bash
-docker-compose up -d postgres redis
-```
+Following the SSR paper exactly, we validate each injected bug:
 
-3. **Run the backend**:
-```bash
-python -m ssr_studio.cli serve
-```
+| Step | Name | Purpose |
+|------|------|---------|
+| 1 | **Test Files Existence** | Oracle test file was created |
+| 2 | **Parser Validity** | Modified files have valid syntax |
+| 3 | **Original Tests Pass** | Existing tests still pass on clean code |
+| 4 | **Bug Scope** | Bug is contained to allowed files/lines |
+| 5 | **Bug Validity** | Oracle test fails on buggy code |
+| 6 | **Test Weakening Validity** | Oracle test passes on clean code |
+| 7 | **Inverse Mutation Testing** | Random mutations don't accidentally pass oracle |
 
-4. **Install and run frontend**:
-```bash
-cd ui
-npm install
-npm run dev
-```
+Step 7 is particularly clever: it ensures the oracle test is specific to *this* bug, not just any change.
+
+---
 
 ## 📖 Usage
+
+### Demo Script
+
+```bash
+# With OpenAI
+python demo.py --api-key sk-...
+
+# With Anthropic
+python demo.py --provider anthropic --api-key sk-ant-...
+
+# With specific model
+python demo.py --model gpt-4o --api-key sk-...
+
+# Multiple solve attempts
+python demo.py --max-attempts 5 --api-key sk-...
+```
 
 ### CLI Commands
 
 ```bash
 # Start the API server
-ssr-studio serve --host 0.0.0.0 --port 8000
+python -m ssr_studio.cli serve --host 0.0.0.0 --port 8000
 
 # List environments
-ssr-studio env list
+python -m ssr_studio.cli env list
 
 # Add a new environment
-ssr-studio env add my-python-project python:3.11-slim --language python
+python -m ssr_studio.cli env add my-project python:3.11-slim --language python
 
 # Run an episode
-ssr-studio run <env-id> --max-attempts 3 --injector-model gpt-4-turbo
+python -m ssr_studio.cli run <env-id> --max-attempts 3
 
 # View episode history
-ssr-studio episodes --status completed --limit 10
+python -m ssr_studio.cli episodes --status completed --limit 10
 
 # Show episode details
-ssr-studio show <episode-id>
+python -m ssr_studio.cli show <episode-id>
 
 # View metrics summary
-ssr-studio metrics
+python -m ssr_studio.cli metrics
 ```
 
 ### API Examples
@@ -141,24 +209,15 @@ status = client.get(f"/api/episodes/{episode['episode_id']}").json()
 print(f"Status: {status['status']}, Reward: {status.get('final_reward')}")
 ```
 
-## 🔬 Validation Pipeline
-
-SSR Studio implements all 7 validation steps from the SSR paper:
-
-| Step | Name | Description |
-|------|------|-------------|
-| 1 | Test Files Existence | Verify oracle test file was created |
-| 2 | Parser Validity | Ensure modified files have valid syntax |
-| 3 | Original Tests Pass | Existing tests still pass on clean codebase |
-| 4 | Bug Scope | Bug is contained to allowed files/lines |
-| 5 | Bug Validity | Oracle test fails on buggy code |
-| 6 | Test Weakening Validity | Oracle test passes on clean code |
-| 7 | Inverse Mutation Testing | Random mutations don't accidentally pass oracle test |
+---
 
 ## 🏗️ Architecture
 
 ```
 ssr-studio/
+├── demo.py                 # Self-contained demo script
+├── examples/
+│   └── calculator/         # Example project (45 tests)
 ├── src/ssr_studio/
 │   ├── api.py              # FastAPI routes
 │   ├── config.py           # Configuration management
@@ -184,6 +243,8 @@ ssr-studio/
 └── Dockerfile              # Backend container
 ```
 
+---
+
 ## ⚙️ Configuration
 
 Configuration can be set via:
@@ -203,30 +264,21 @@ See `configs/default.yaml` for all available options.
 | Sandbox Timeout | `SSR_SANDBOX_TIMEOUT_SECONDS` | Max execution time (default: 300s) |
 | Storage Backend | `SSR_STORAGE_BACKEND` | `local` or `s3` |
 
+---
+
 ## 🐳 Running Local Models
 
 To use local models with vLLM:
 
 ```bash
-# Start with vLLM profile
+# Start with vLLM profile (requires NVIDIA GPU)
 docker-compose --profile local-models up -d
 
 # Configure to use local models
 export SSR_DEFAULT_MODEL_PROVIDER=local
 ```
 
-Requires NVIDIA GPU with sufficient VRAM for the chosen model.
-
-## 📊 Metrics
-
-The dashboard tracks:
-- Episode success rate
-- Average reward over time
-- Validation step pass rates
-- Solver attempt statistics
-- Model performance comparison
-
-Export metrics in Prometheus format at `/metrics` endpoint.
+---
 
 ## 🔒 Security
 
@@ -236,7 +288,22 @@ Export metrics in Prometheus format at `/metrics` endpoint.
 - Non-root container execution
 - No new privileges flag set
 
+---
+
+## 📊 Research Applications
+
+This implementation can be used for:
+
+1. **Exploring SSR dynamics** - How do injection and solving capabilities co-evolve?
+2. **Model comparison** - Which LLMs are better at injection vs. solving?
+3. **Training data generation** - Create validated bug/fix pairs for fine-tuning
+4. **Benchmark creation** - Generate new SWE-bench-style tasks
+
+---
+
 ## 🤝 Contributing
+
+Contributions are welcome! See [CONTRIBUTING.md](../CONTRIBUTING.md) for guidelines.
 
 1. Fork the repository
 2. Create a feature branch
@@ -244,11 +311,37 @@ Export metrics in Prometheus format at `/metrics` endpoint.
 4. Run tests: `pytest tests/`
 5. Submit a pull request
 
+---
+
 ## 📚 References
 
-- [Toward Training Superintelligent Software Agents through Self-Play SWE-RL](https://arxiv.org/abs/2512.18552v1)
-- [SWE-bench: Can Language Models Resolve Real-World GitHub Issues?](https://arxiv.org/abs/2310.06770)
+### Primary Reference
+
+- **SWE-RL Paper**: Wei, Y., et al. (2024). "SWE-RL: Advancing LLM Reasoning via Reinforcement Learning on Open Software Evolution." [arXiv:2512.18552](https://arxiv.org/abs/2512.18552)
+
+### Related Work
+
+- [SWE-bench](https://www.swebench.com/) - The benchmark for evaluating LLMs on real GitHub issues
+- [SWE-agent](https://github.com/princeton-nlp/SWE-agent) - Agent framework for software engineering tasks
+- [OpenHands](https://github.com/All-Hands-AI/OpenHands) - Platform for AI software developers
+
+---
 
 ## 📄 License
 
-MIT License - see LICENSE file for details.
+MIT License - see [LICENSE](../LICENSE) file for details.
+
+---
+
+## ⭐ Citation
+
+If you use this implementation in your research, please cite the original SSR paper:
+
+```bibtex
+@article{wei2024swerl,
+  title={SWE-RL: Advancing LLM Reasoning via Reinforcement Learning on Open Software Evolution},
+  author={Wei, Yuxiang and Duchenne, Olivier and Copet, Jade and Carbonneaux, Quentin and Zhang, Lingming and Fried, Daniel and Synnaeve, Gabriel and Singh, Rishabh and Wang, Sida I.},
+  journal={arXiv preprint arXiv:2512.18552},
+  year={2024}
+}
+```
