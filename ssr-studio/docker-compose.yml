@@ -1,0 +1,161 @@
+version: "3.9"
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: ssr-studio-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-ssr_studio}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ssr_studio_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-ssr_studio}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis for caching and task queues
+  redis:
+    image: redis:7-alpine
+    container_name: ssr-studio-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # MinIO for S3-compatible artifact storage (optional, for production)
+  minio:
+    image: minio/minio:latest
+    container_name: ssr-studio-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin123}
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # SSR Studio Backend API
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ssr-studio-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      # Database
+      SSR_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-ssr_studio}:${POSTGRES_PASSWORD:-ssr_studio_secret}@postgres:5432/${POSTGRES_DB:-ssr_studio}
+      
+      # Storage
+      SSR_STORAGE_BACKEND: ${STORAGE_BACKEND:-local}
+      SSR_LOCAL_STORAGE_PATH: /app/artifacts
+      SSR_S3_ENDPOINT: http://minio:9000
+      SSR_S3_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      SSR_S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin123}
+      SSR_S3_BUCKET: ${S3_BUCKET:-ssr-studio-artifacts}
+      
+      # Models
+      SSR_OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      SSR_ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      SSR_DEFAULT_MODEL_PROVIDER: ${DEFAULT_MODEL_PROVIDER:-openai}
+      
+      # Sandbox
+      SSR_SANDBOX_TIMEOUT_SECONDS: ${SANDBOX_TIMEOUT:-300}
+      SSR_SANDBOX_MEMORY_LIMIT: ${SANDBOX_MEMORY_LIMIT:-2g}
+      SSR_SANDBOX_CPU_LIMIT: ${SANDBOX_CPU_LIMIT:-2.0}
+      SSR_SANDBOX_NETWORK_DISABLED: "true"
+      
+      # Redis
+      SSR_REDIS_URL: redis://redis:6379/0
+      
+      # General
+      SSR_LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      SSR_DEBUG: ${DEBUG:-false}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - artifacts_data:/app/artifacts
+      - ./configs:/app/configs:ro
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # SSR Studio Frontend
+  frontend:
+    build:
+      context: ./ui
+      dockerfile: Dockerfile
+    container_name: ssr-studio-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      NEXT_PUBLIC_API_URL: http://backend:8000
+    ports:
+      - "3000:3000"
+
+  # vLLM Local Model Server (optional)
+  vllm:
+    image: vllm/vllm-openai:latest
+    container_name: ssr-studio-vllm
+    profiles:
+      - local-models
+    restart: unless-stopped
+    runtime: nvidia
+    environment:
+      HUGGING_FACE_HUB_TOKEN: ${HF_TOKEN:-}
+    command: >
+      --model ${VLLM_MODEL:-meta-llama/Llama-3.1-8B-Instruct}
+      --tensor-parallel-size ${VLLM_TP_SIZE:-1}
+      --max-model-len ${VLLM_MAX_LEN:-8192}
+    ports:
+      - "8080:8000"
+    volumes:
+      - vllm_cache:/root/.cache/huggingface
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
+  artifacts_data:
+  vllm_cache:
+
+networks:
+  default:
+    name: ssr-studio-network

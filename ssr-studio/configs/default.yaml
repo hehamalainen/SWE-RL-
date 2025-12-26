@@ -1,0 +1,145 @@
+# SSR Studio Configuration
+# Copy this file to configs/local.yaml and customize
+
+# Application settings
+app:
+  name: "SSR Studio"
+  version: "0.1.0"
+  debug: false
+  log_level: "INFO"
+
+# Database configuration
+database:
+  url: "postgresql+asyncpg://ssr_studio:ssr_studio_secret@localhost:5432/ssr_studio"
+  pool_size: 10
+  max_overflow: 20
+  echo: false
+
+# Storage configuration
+storage:
+  backend: "local"  # Options: local, s3
+  local:
+    path: "./artifacts"
+  s3:
+    endpoint: "http://localhost:9000"
+    access_key: ""
+    secret_key: ""
+    bucket: "ssr-studio-artifacts"
+    region: "us-east-1"
+
+# Model providers configuration
+models:
+  default_provider: "openai"
+  openai:
+    api_key: ""  # Set via SSR_OPENAI_API_KEY env var
+    default_model: "gpt-4-turbo"
+    temperature: 0.7
+    max_tokens: 4096
+  anthropic:
+    api_key: ""  # Set via SSR_ANTHROPIC_API_KEY env var
+    default_model: "claude-3-sonnet-20240229"
+    temperature: 0.7
+    max_tokens: 4096
+  local:
+    base_url: "http://localhost:8080/v1"
+    default_model: "meta-llama/Llama-3.1-8B-Instruct"
+    temperature: 0.7
+    max_tokens: 4096
+
+# Sandbox configuration
+sandbox:
+  timeout_seconds: 300
+  memory_limit: "2g"
+  cpu_limit: 2.0
+  network_disabled: true
+  working_dir: "/workspace"
+  docker_socket: "/var/run/docker.sock"
+  
+  # Security settings
+  security:
+    read_only_root: false
+    no_new_privileges: true
+    drop_capabilities:
+      - "ALL"
+
+# Validation configuration
+validation:
+  # Enable/disable validation steps
+  steps:
+    test_files_existence: true
+    parser_validity: true
+    original_tests_pass: true
+    bug_scope: true
+    bug_validity: true
+    test_weakening_validity: true
+    inverse_mutation_testing: true
+  
+  # Inverse mutation testing settings
+  inverse_mutation:
+    num_mutations: 5
+    timeout_per_mutation: 60
+
+# Episode configuration
+episodes:
+  default_max_solver_attempts: 3
+  max_solver_attempts_limit: 10
+  auto_cleanup_failed: false
+  
+  # Reward settings (based on SSR paper)
+  rewards:
+    solve_success: 1.0
+    solve_failure: 0.0
+    partial_tests: 0.5
+    validation_failure_penalty: -0.1
+
+# Injector agent configuration
+injector:
+  strategies:
+    - "semantic_mutation"
+    - "boundary_condition"
+    - "off_by_one"
+    - "null_reference"
+    - "type_confusion"
+    - "logic_inversion"
+  
+  # Prompt customization
+  max_iterations: 20
+  require_oracle_test: true
+  require_test_command: true
+
+# Solver agent configuration
+solver:
+  max_iterations: 30
+  allow_new_dependencies: false
+  protected_paths:
+    - "tests/"
+    - "test/"
+    - "*_test.py"
+    - "test_*.py"
+
+# Redis configuration (optional, for caching)
+redis:
+  url: "redis://localhost:6379/0"
+  enabled: false
+
+# Metrics and observability
+metrics:
+  enabled: true
+  export_format: "prometheus"  # Options: prometheus, json
+  export_path: "/metrics"
+  
+  # Aggregation settings
+  aggregation_window: "1h"
+  retention_days: 30
+
+# API configuration
+api:
+  host: "0.0.0.0"
+  port: 8000
+  workers: 4
+  cors_origins:
+    - "http://localhost:3000"
+    - "http://127.0.0.1:3000"
+  rate_limit:
+    enabled: true
+    requests_per_minute: 60
